@@ -13,7 +13,7 @@ _Use at your own risk, of course, as always._
 ### Usage
 1. Before starting Ubisoft Connect, run `ubisoftconnect-win7fix.exe` from the extracted folder. It needs admin permissions.
 2. Allow the root certificate to be installed. It will be uninstalled (another prompt) when you close the app again.
-3. Wait for the app to show "Ready!".
+3. Wait for the app to show "Ready!". (max a few seconds)
 4. Start Ubisoft Connect.
 5. Keep the app window open until you're done using Ubisoft Connect.
 
