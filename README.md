@@ -1,5 +1,5 @@
 # ubisoftconnect-win7fix
-A proxy application to fix Ubisoft's `channel-service` not supporting any cipher suites for Windows 7, so that chat and multiplayer in Ubisoft Connect works again.
+A proxy application to fix Ubisoft's `channel-service` not supporting any cipher suites for Windows 7, so that chat and multiplayer in Ubisoft Connect works again. Without it, Ubisoft Connect/Uplay may, on Windows 7, not show any chats, you cannot create groups, you cannot invite friends, and so on.
 
 _Use at your own risk, of course, as always._
 
