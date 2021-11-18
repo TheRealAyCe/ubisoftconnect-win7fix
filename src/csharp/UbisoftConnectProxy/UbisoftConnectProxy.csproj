@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>9.0</LangVersion>
+    <ApplicationIcon>ICON259_1.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--<PackageReference Include="Newtonsoft.Json" Version="13.0.1" />-->
+    <PackageReference Include="Nito.AsyncEx.Context" Version="5.1.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="RootCertificate\channelservice.upc.ubi.com-2021-11-15-161158.p12">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
