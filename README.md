@@ -2,7 +2,7 @@
 Crazy proxy application to fix Ubisoft's channel-service not supporting any cipher suites for Win7, so that chat and multiplayer works again.
 
 # [>> Download <<](https://github.com/TheRealAyCe/ubisoftconnect-win7fix/releases)
-**You need Java 8 installed for this.**
+**You need Java 8 installed for this. Start the app before starting Ubisoft Connect.**
 
 Extract the files in some directory and run `ubisoftconnect-win7fix.exe` from it. Keep the app window open until you're done using Ubisoft Connect. It will setup everything automatically and clean up after itself once you close it. It will ask for admin permissions due to having to change the `hosts` file and possibly because it's installing (and later removing again) a root certificate for your current Windows user. Use at your own risk, of course.
 
