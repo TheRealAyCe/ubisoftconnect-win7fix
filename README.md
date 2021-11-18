@@ -1,10 +1,23 @@
 # ubisoftconnect-win7fix
-Crazy proxy application to fix Ubisoft's channel-service not supporting any cipher suites for Win7, so that chat and multiplayer works again.
+A proxy application to fix Ubisoft's `channel-service` not supporting any cipher suites for Windows 7, so that chat and multiplayer in Ubisoft Connect works again.
 
-# [>> Download <<](https://github.com/TheRealAyCe/ubisoftconnect-win7fix/releases)
-**You need Java 8 installed for this. Start the app before starting Ubisoft Connect.**
+_Use at your own risk, of course, as always._
 
-Extract the files in some directory and run `ubisoftconnect-win7fix.exe` from it. Keep the app window open until you're done using Ubisoft Connect. It will setup everything automatically and clean up after itself once you close it. It will ask for admin permissions due to having to change the `hosts` file and possibly because it's installing (and later removing again) a root certificate for your current Windows user. Use at your own risk, of course.
+## [>> Download <<](https://github.com/TheRealAyCe/ubisoftconnect-win7fix/releases)
+**You need Java 8 installed for this.**
+
+### Installation
+1. Make sure Java 8 is installed.
+2. Extract the ZIP in some directory. You should have `ubisoftconnect-win7fix.exe` and a folder `Webserver`.
+
+### Usage
+1. Before starting Ubisoft Connect, run `ubisoftconnect-win7fix.exe` from the extracted folder. It needs admin permissions.
+2. Allow the root certificate to be installed. It will be uninstalled (another prompt) when you close the app again.
+3. Wait for the app to show "Ready!".
+4. Start Ubisoft Connect.
+5. Keep the app window open until you're done using Ubisoft Connect.
+
+It will setup everything automatically and clean up after itself once you close it. It will ask for admin permissions due to having to change the `hosts` file and possibly because it's installing (and later removing again) a root certificate for your current Windows user.
 
 ## The problem
 Ubisoft Connect loses chat and multiplayer party invite functionality under Windows 7, because the backend service that the application is trying to connect with does not support the HTTPS functionality shipped in Windows 7. The `launcher_log.txt` will contain lines with `Http status code is none  for url https://channel-service.upc.ubi.com/...`. Using Internet Explorer, which uses the same API to access HTTPS functionality as Ubisoft Connect, it is not possible to open `https://channel-service.upc.ubi.com/`.
