@@ -47,7 +47,8 @@ This is what I did/the ubisoftconnect-win7fix does:
 3. Create a webserver app with ASP.NET Core, using the self-signed root certificate, to act as our proxy server. This app will receive HTTPS requests from Ubisoft Connect, negotiating a cipher suite that is supported in Windows 7, and then pipe the request to the actual Ubisoft endpoint.
 4. The actual Ubisoft endpoint can be contacted either by another machine in the network running Windows 10 (so the webserver app would run on that and directly contact the Ubisoft endpoint, giving back the actual HTTP response), or by using another app written in a separate framework, like Java, which does not use the operating system's libraries for HTTPS communication.
 5. Adapt the `hosts` file, adding `127.0.0.1  channel-service.upc.ubi.com`, so that any requests to the Ubisoft endpoint are redirected to our webserver app instead. If we use a Java application running on the same machine, this must be the localhost address, if you use another machine in your network it must be that machine's network IP address.
-6. You can test if you set up everything correctly by using Internet Explorer to access the URL. It will say "404" when it can successfully connect. Otherwise it will warn about TLS 1.2 not being configured properly.
+
+You can test if you set up everything correctly by using Internet Explorer to access the URL. It will say "404" when it can successfully connect. Otherwise it will warn about TLS 1.2 not being configured properly.
 
 ## Related links
 - https://discussions.ubisoft.com/topic/107880/cannot-read-send-chat-messages-tls-1-2-not-supported/2?lang=en-US
