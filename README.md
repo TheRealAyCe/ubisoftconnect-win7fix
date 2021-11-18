@@ -54,3 +54,4 @@ This is what I did/the ubisoftconnect-win7fix does:
 - https://www.ubisoft.com/en-us/help/connectivity-and-performance/article/missing-chat-messages-and-game-invitations-in-ubisoft-connect/000097837
 - https://discussions.ubisoft.com/topic/108296/ubisoft-support-are-playing-games-with-me-i-need-to-make-a-complaint-case-15170691/15?lang=en-US
 - https://superuser.com/questions/1687537/forcing-tls-1-2-on-windows-7
+- https://discussions.ubisoft.com/topic/121483/fixed-chats-groups-invites-not-working-in-windows-7?lang=en-US
