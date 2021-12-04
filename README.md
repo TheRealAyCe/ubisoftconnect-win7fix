@@ -56,3 +56,4 @@ You can test if you set up everything correctly by using Internet Explorer to ac
 - https://discussions.ubisoft.com/topic/108296/ubisoft-support-are-playing-games-with-me-i-need-to-make-a-complaint-case-15170691/15?lang=en-US
 - https://superuser.com/questions/1687537/forcing-tls-1-2-on-windows-7
 - https://discussions.ubisoft.com/topic/121483/fixed-chats-groups-invites-not-working-in-windows-7?lang=en-US
+- https://www.reddit.com/r/uplay/comments/r8fzgs/chat_groups_and_multiplayer_invites_not_working/
