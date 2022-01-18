@@ -62,25 +62,20 @@ namespace UbisoftConnectProxy
             {
                 foreach (var header in dto.Headers)
                 {
-                    if (header.Name == "Content-Type")
+                    switch (header.Name.ToLowerInvariant())
                     {
-                        context.Response.ContentType = string.Join(",", header.Values);
-                    }
-                    else if (header.Name == "Content-Length")
-                    {
-                        context.Response.ContentLength = int.Parse(string.Join(",", header.Values));
-                    }
-                    else
-                    {
-                        foreach (var headerValue in header.Values)
-                        {
-                            context.Response.Headers.Add(header.Name, headerValue);
-                            if (header.Name.ToLowerInvariant() == "strict-transport-security")
+                        case "strict-transport-security":
+                        case "connection":
+                        case "keep-alive":
+                            break;
+                        case "content-type": context.Response.ContentType = string.Join(",", header.Values); break;
+                        case "content-length": context.Response.ContentLength = int.Parse(string.Join(",", header.Values)); break;
+                        default:
+                            foreach (var headerValue in header.Values)
                             {
-                                // exception when using multiple entries (also, wtf?)
-                                break;
+                                context.Response.Headers.Add(header.Name, headerValue);
                             }
-                        }
+                            break;
                     }
                 }
 

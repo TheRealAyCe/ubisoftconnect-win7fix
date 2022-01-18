@@ -21,48 +21,56 @@ public final class WebRequester {
 		// started! communicate that?
 
 		HttpURLConnection connection = (HttpURLConnection) new URL(request.Data.Uri).openConnection();
-		// HttpURLConnection connection = (HttpURLConnection) new
-		// URL("http://localhost").openConnection();
-		connection.setUseCaches(false);
+		try {
+			// HttpURLConnection connection = (HttpURLConnection) new
+			// URL("http://localhost").openConnection();
+			connection.setUseCaches(false);
 
-		connection.setRequestProperty("Accept", "*/*");
-		connection.setRequestMethod(request.Data.Method);
-		for (HeaderDto header : request.Data.Headers) {
-			connection.setRequestProperty(header.Name, String.join(",", header.Values));
-		}
-
-		if (!request.Data.Method.equals("GET")) {
-			connection.setDoOutput(true);
-			try (OutputStream out = connection.getOutputStream()) {
-				out.write(request.Data.Content);
-				out.flush();
+			connection.setRequestProperty("Accept", "*/*");
+			connection.setRequestMethod(request.Data.Method);
+			for (HeaderDto header : request.Data.Headers) {
+				connection.setRequestProperty(header.Name, String.join(",", header.Values));
 			}
-		}
 
-		System.out.println("IS: " + connection);
-
-		connection.connect();
-
-		try (InputStream in = connection.getInputStream()) {
-			response.Data.Content = MiscIO.readFully(in);
-		} catch (IOException e) {
-			InputStream in = connection.getErrorStream();
-			if (in != null) {
-				try (InputStream in2 = in) {
-					response.Data.Content = MiscIO.readFully(in2);
+			if (!request.Data.Method.equals("GET")) {
+				connection.setDoOutput(true);
+				try (OutputStream out = connection.getOutputStream()) {
+					out.write(request.Data.Content);
+					out.flush();
 				}
 			}
+
+			System.out.println("Connecting to: " + connection);
+
+			connection.connect();
+
+			try (InputStream in = connection.getInputStream()) {
+				response.Data.Content = MiscIO.readFully(in);
+			} catch (IOException e) {
+				InputStream in = connection.getErrorStream();
+				if (in != null) {
+					try (InputStream in2 = in) {
+						response.Data.Content = MiscIO.readFully(in2);
+					}
+				}
+			}
+
+			System.out.println("Got " + new String(response.Data.Content, StandardCharsets.UTF_8));
+
+			response.Data.StatusCode = connection.getResponseCode();
+			response.Data.Headers = connection.getHeaderFields().entrySet().stream() //
+					.filter(x -> x.getKey() != null).<HeaderDto>map(x -> {
+						HeaderDto header = new HeaderDto();
+						header.Name = x.getKey();
+						header.Values = x.getValue().toArray(new String[x.getValue().size()]);
+						return header;
+					}).toArray(HeaderDto[]::new);
+		} finally {
+			try {
+				connection.disconnect();
+			} catch (Exception e) {
+				System.out.println("Error disconnecting: " + e);
+			}
 		}
-
-		System.out.println("Got " + new String(response.Data.Content, StandardCharsets.UTF_8));
-
-		response.Data.StatusCode = connection.getResponseCode();
-		response.Data.Headers = connection.getHeaderFields().entrySet().stream() //
-				.filter(x -> x.getKey() != null).<HeaderDto>map(x -> {
-					HeaderDto header = new HeaderDto();
-					header.Name = x.getKey();
-					header.Values = x.getValue().toArray(new String[x.getValue().size()]);
-					return header;
-				}).toArray(HeaderDto[]::new);
 	}
 }

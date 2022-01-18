@@ -176,10 +176,10 @@ namespace UbisoftConnectProxy
         private void SendError(string error, bool fatal)
         {
             _javaConnection!.Send(new WebserverErrorDto
-                {
-                    Fatal = fatal,
-                    Text = error
-                });
+            {
+                Fatal = fatal,
+                Text = error
+            });
         }
 
         public static void WriteCheck(string check)
@@ -300,6 +300,7 @@ namespace UbisoftConnectProxy
             // done!
             return false;
         }
+
         /// <summary>
         /// Returns whether it already was the way you want it.
         /// </summary>
@@ -332,7 +333,6 @@ namespace UbisoftConnectProxy
                 }
                 // remove
                 store.Remove(_certificate);
-                return true;
 
             }
             return false;

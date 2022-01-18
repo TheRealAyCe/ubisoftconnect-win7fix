@@ -13,10 +13,12 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 import javax.swing.BorderFactory;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.WindowConstants;
+import javax.swing.text.StyleConstants;
 
 import com.iosoft.helpers.Misc;
 import com.iosoft.helpers.MiscImg;
@@ -67,10 +69,13 @@ public final class UbisoftConnectForwarder {
 	private final JPanel _panel;
 	private final GameTextPane _labelCurrentStatus;
 	private final JLabel _labelRequests;
+	private final JPanel _bottomPanel;
+	private final RequestsView _requestsView;
 
 	private UbisoftConnectForwarder(String exePath) {
 		_exePath = exePath;
-		MiscAWT.createEDTKeepalive();
+
+		MiscAWT.setSystemLookAndFeel();
 
 		JFrame window = new JFrame("ubisoftconnect-win7fix by AyCe");
 		window.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
@@ -79,22 +84,41 @@ public final class UbisoftConnectForwarder {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		MiscAWT.setSystemLookAndFeel();
-		_labelRequests = new JLabel();
 		_labelCurrentStatus = new GameTextPane("Starting...");
 		_labelCurrentStatus.setFont(_labelCurrentStatus.getFont().deriveFont(20f));
 		_labelCurrentStatus.setHorizontalCentered();
 		_panel = new JPanel(new BorderLayout());
 		_panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-		_panel.add(new JLabel("v1 - 2021-11-18"), BorderLayout.NORTH);
+		_panel.add(new JLabel("v2pre1 - 2022-01-18"), BorderLayout.NORTH);
 		_panel.add(_labelCurrentStatus, BorderLayout.CENTER);
-		_panel.add(_labelRequests, BorderLayout.SOUTH);
+		
+		_bottomPanel = new JPanel(new BorderLayout());
+		_bottomPanel.setOpaque(false);
+		_labelRequests = new JLabel();
+		_labelRequests.setBorder(BorderFactory.createEmptyBorder(0, 5, 0, 0));
+		_bottomPanel.add(_labelRequests, BorderLayout.CENTER);
+		JButton buttonShowRequests = new JButton("Show");
+		buttonShowRequests.setOpaque(false);
+		_bottomPanel.add(buttonShowRequests, BorderLayout.WEST);
+		
 		window.add(_panel);
 		window.setPreferredSize(new Dimension(400, 300));
 		window.setMinimumSize(new Dimension(400, 300));
 		window.pack();
 		window.setLocationRelativeTo(null);
 		window.setVisible(true);
+
+		JFrame requestsWindow = new JFrame("Requests");
+		requestsWindow.setIconImage(window.getIconImage());
+		requestsWindow.setDefaultCloseOperation(JFrame.HIDE_ON_CLOSE);
+		_requestsView = new RequestsView();
+		requestsWindow.add(_requestsView.Panel);
+		requestsWindow.setPreferredSize(new Dimension(400, 300));
+		requestsWindow.setMinimumSize(new Dimension(400, 300));
+		requestsWindow.pack();
+		requestsWindow.setLocationRelativeTo(window);
+
+		buttonShowRequests.addActionListener(evt -> requestsWindow.setVisible(true));
 
 		Dispatcher.getForCurrentThread()
 				.setMainUnhandledExceptionHandler(x -> ErrorScreen.showAndDump(window, x, "ubisoftconnect-win7fix"));
@@ -108,6 +132,7 @@ public final class UbisoftConnectForwarder {
 	private void setStatus(String text, Boolean isGood) {
 		_labelCurrentStatus.setText(text);
 		_labelCurrentStatus.setForeground(isGood == null || isGood.booleanValue() ? Color.BLACK : Color.RED);
+		// _labelCurrentStatus.addHyperlink("testuhu", null);
 	}
 
 	private void startTcp443() {
@@ -116,8 +141,10 @@ public final class UbisoftConnectForwarder {
 				setStatus("TCP 443 is available!", null);
 				onTcp443Done();
 			} else {
-				setError("Port 443 may be blocked, please close any applications using it (webservers and so on).\n\n"
-						+ error);
+				_labelCurrentStatus.setAlign(StyleConstants.ALIGN_JUSTIFIED);
+				setError(
+						"TCP port 443 seems to be already in use by another application, likely a webserver. As we need to start our own webserver, you must temporarily close that application. Restart this tool afterwards to try again.\n\nWays to find out which application is responsible:\n- Visiting https://localhost and see where you land.\n- Use TCPView (download from Microsoft).\n\nError message:\n"
+								+ error);
 				error.printStackTrace();
 			}
 		});
@@ -176,7 +203,8 @@ public final class UbisoftConnectForwarder {
 
 	private void onWebserverReady(WebserverReady msg) {
 		if (msg.What == Ready.Hosts) {
-			// 4. Hosts file ready (no redirect) -> make "warumup" request so that we
+			setStatus("Creating DNS cache entry...", null);
+			// 4. Hosts file ready (no redirect) -> make "warmup" request so that we
 			// remember the actual IP address
 			Async.runAsyncWrap(() -> {
 				// ensure SSL classes are loaded without interruption (probably not needed here)
@@ -199,7 +227,8 @@ public final class UbisoftConnectForwarder {
 			setStatus("Starting web listener...", null);
 		} else if (msg.What == Ready.Running) {
 			_panel.setBackground(new Color(170, 255, 170));
-			setStatus("Ready!\n\nYou can start Ubisoft Connect now.", true);
+			setStatus("Ready!\n\nYou can start Ubisoft Connect now.\n\nKeep this window open.", true);
+			_panel.add(_bottomPanel, BorderLayout.SOUTH);
 			updateRequestsLabel();
 		}
 	}
@@ -232,8 +261,7 @@ public final class UbisoftConnectForwarder {
 
 		// can we accept?
 		Mutable<Consumer<Socket>> mutHandler = new Mutable<>();
-		final Consumer<Socket> onConnected = x -> mutHandler.Value.accept(x);
-		TcpListener tcpListener = new TcpListener(onConnected);
+		TcpListener tcpListener = new TcpListener((Socket x) -> mutHandler.Value.accept(x));
 		try {
 			tcpListener.start(null, (char) 443, true);
 		} catch (IOException e) {
@@ -263,7 +291,7 @@ public final class UbisoftConnectForwarder {
 			}
 		});
 
-		// can we connect to it?
+		// can we connect to it? (executed right after server was started successfully)
 		Task<TcpConnecter.Result> taskConnect = TcpConnecter.connectAsync("127.0.0.1", (char) 443, true);
 		// running, now wait for a client (max 5 sec)
 		VTask taskConnectTimeout = VTask.delay(5);
@@ -322,6 +350,7 @@ public final class UbisoftConnectForwarder {
 		} catch (WeirdException e) {
 			// too bad
 			e.printStackTrace();
+			setError("What? " + e);
 		}
 	}
 
@@ -366,6 +395,7 @@ public final class UbisoftConnectForwarder {
 				_numRequestsFailed++;
 				System.out.println("Error with request '" + msg.RequestId + "': " + ex);
 			}
+			_requestsView.add(msg.Data, response.Data, ex);
 			updateRequestsLabel();
 
 			_pendingRequests.remove(mutTask.Value);

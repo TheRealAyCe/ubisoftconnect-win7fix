@@ -8,11 +8,6 @@ using System.Threading.Tasks;
 
 namespace UbisoftConnectProxy
 {
-    public interface IProxy
-    {
-        Task ForwardAsync(HttpContext context);
-    }
-    
     //public class DirectProxy : IProxy
     //{
     //    public async Task ForwardAsync(HttpContext context)

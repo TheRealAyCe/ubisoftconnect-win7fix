@@ -36,6 +36,8 @@ public class Connection {
 
 		_tcpConnection = new TcpConnection(socket, this::receiveWorkerThread);
 		_tcpConnection.eventOnDisconnected().register(this::onDisconnected);
+		// named pipes did not work, as Java does not support async access for them
+		// (read&write at the same time)
 		// _pipe = new RandomAccessFile("\\\\.\\pipe\\ubiconfor", "rw");
 	}
 
