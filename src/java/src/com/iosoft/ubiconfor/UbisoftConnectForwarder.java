@@ -89,7 +89,7 @@ public final class UbisoftConnectForwarder {
 		_labelCurrentStatus.setHorizontalCentered();
 		_panel = new JPanel(new BorderLayout());
 		_panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-		_panel.add(new JLabel("v2pre1 - 2022-01-18"), BorderLayout.NORTH);
+		_panel.add(new JLabel("v2 - 2022-02-04"), BorderLayout.NORTH);
 		_panel.add(_labelCurrentStatus, BorderLayout.CENTER);
 		
 		_bottomPanel = new JPanel(new BorderLayout());
