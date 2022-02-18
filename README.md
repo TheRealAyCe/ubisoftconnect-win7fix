@@ -42,6 +42,8 @@ My workaround "solution", is to spoof their endpoint server, and redirect the tr
 
 This is what I did/the ubisoftconnect-win7fix does:
 
+(These are NOT instructions for running the fix. This is only relevant for you if you want to make your own fix.)
+
 1. Create a self-signed certificate for the hostname `channel-service.upc.ubi.com`. This is needed so that we can pretend to be the Ubisoft endpoint that causes problems.
 2. Install it as a root certificate on the machine using Ubisoft Connect. This is needed so that Ubisoft Connect will accept our proxy server as the real deal.
 3. Create a webserver app with ASP.NET Core, using the self-signed root certificate, to act as our proxy server. This app will receive HTTPS requests from Ubisoft Connect, negotiating a cipher suite that is supported in Windows 7, and then pipe the request to the actual Ubisoft endpoint.
