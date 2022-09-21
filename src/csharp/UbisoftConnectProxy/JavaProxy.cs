@@ -87,10 +87,7 @@ namespace UbisoftConnectProxy
             }
             catch (Exception e)
             {
-                _synchronizer.SynchronizationContext.Post(x =>
-                {
-                    _synchronizer.Logic.OnProxyError(e);
-                }, null);
+                _synchronizer.SynchronizationContext.Post(x => _synchronizer.Logic.OnProxyError(e), null);
             }
         }
     }
