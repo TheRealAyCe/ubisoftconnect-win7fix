@@ -26,6 +26,8 @@ namespace UbisoftConnectProxy
 
         private Task? _disposeTask;
 
+        public string[] Domains { get; set; } = Array.Empty<String>();
+
         public Logic()
         {
             Thread.CurrentThread.Name = "Main Logic Thread";
@@ -42,7 +44,7 @@ namespace UbisoftConnectProxy
             // get the first certificate file
             var folderRootCertificate = new DirectoryInfo("RootCertificate");
             var certFile = folderRootCertificate.EnumerateFiles()
-                .OrderBy(x => x.FullName.ToLowerInvariant().EndsWith("p12") ? 0 : 1)
+                .OrderBy(x => x.FullName.ToLowerInvariant().EndsWith("p12") || x.FullName.ToLowerInvariant().EndsWith("pfx") ? 0 : 1)
                 .FirstOrDefault();
             if (certFile == null)
             {
@@ -51,7 +53,15 @@ namespace UbisoftConnectProxy
                 _certificate = null!;
                 return;
             }
-            _certificate = new X509Certificate2(File.ReadAllBytes(certFile.FullName), "password");
+
+            var passwordFile = Path.Combine(folderRootCertificate.FullName, "password.txt");
+            var password = File.Exists(passwordFile)
+                ? File.ReadAllText(passwordFile, Misc.UTF8NoBOM)
+                : null;
+
+            _certificate = password == null
+                ? new X509Certificate2(File.ReadAllBytes(certFile.FullName))
+                : new X509Certificate2(File.ReadAllBytes(certFile.FullName), password);
         }
 
         public async Task RunAsync(ushort javaTcpPort)
@@ -59,12 +69,18 @@ namespace UbisoftConnectProxy
             // 1. Connect to Java
             WriteCheck("Step 1: Connecting to Java on " + javaTcpPort);
             TaskCompletionSource tcsJavaDnsReady = new();
-            TcpClient tcpClient = new();
-            tcpClient.NoDelay = true;
+            TaskCompletionSource<HelloFromJava> tcsHelloFromJava = new();
+            TcpClient tcpClient = new()
+            {
+                NoDelay = true
+            };
             await tcpClient.ConnectAsync(IPAddress.Loopback, javaTcpPort);
             // connection established! (crashes when a second DnsReady is received, as it should)
-            _javaConnection = new(tcpClient.GetStream(), OnJavaDisconnected, tcsJavaDnsReady.SetResult, OnResponse);
-            WriteSuccess("Connected");
+            _javaConnection = new(tcpClient.GetStream(), OnJavaDisconnected, tcsHelloFromJava.SetResult, tcsJavaDnsReady.SetResult, OnInitialResponse, OnResponseData);
+            WriteSuccess("Connected, waiting for Hello...");
+
+            var hello = await tcsHelloFromJava.Task;
+            Domains = hello.Domains;
 
             // 2. Remove from hosts
             WriteCheck("Step 2: Removing redirect from hosts");
@@ -93,7 +109,7 @@ namespace UbisoftConnectProxy
             WriteSuccess("Ready");
 
             // 4. Once Java says it's ready, change the hosts file
-            WriteCheck("Step 4: Redirecting channel-service.upc.ubi.com to 127.0.0.1");
+            WriteCheck($"Step 4: Redirecting domains ({string.Join(", ", Domains)}) to 127.0.0.1");
             try
             {
                 if (SetHostsFile(true))
@@ -175,7 +191,7 @@ namespace UbisoftConnectProxy
 
         private void SendError(string error, bool fatal)
         {
-            _javaConnection!.Send(new WebserverErrorDto
+            _javaConnection!.Send(new WS_WebserverErrorDto
             {
                 Fatal = fatal,
                 Text = error
@@ -271,34 +287,41 @@ namespace UbisoftConnectProxy
         /// <summary>
         /// Returns whether it already was the way you want it.
         /// </summary>
-        static bool SetHostsFile(bool redirectActive)
+        bool SetHostsFile(bool redirectActive)
         {
             // find the entry
-            const string ip = "127.0.0.1";
-            const string hostname = "channel-service.upc.ubi.com";
-            const string fullLine = ip + "   " + hostname + "   # ubisoftconnect-win7fix";
+            var modified = false;
             List<string> lines = new(File.ReadAllLines(_hostsFilePath, Misc.UTF8NoBOM));
 
-            if (redirectActive)
+            const string ip = "127.0.0.1";
+            foreach (var domain in Domains)
             {
-                if (lines.Any(x => x.StartsWith(fullLine)))
-                {
-                    // already present
-                    return true;
-                }
-                // add it
-                lines.Add(fullLine);
-            }
-            else if (lines.RemoveAll(x => x.StartsWith(fullLine)) == 0)
-            {
-                // was not removed -> was not present
-                return true;
-            }
+                //const string hostname = "channel-service.upc.ubi.com";
+                string hostname = domain;
+                string fullLine = ip + "   " + hostname + "   # ubisoftconnect-win7fix";
 
-            // we need to modify it
-            File.WriteAllLines(_hostsFilePath, lines, Misc.UTF8NoBOM);
-            // done!
-            return false;
+                if (redirectActive)
+                {
+                    if (!lines.Any(x => x.StartsWith(fullLine)))
+                    {
+                        // add it
+                        lines.Add(fullLine);
+                        modified = true;
+                    }
+                }
+                else if (lines.RemoveAll(x => x.StartsWith(fullLine)) > 0)
+                {
+                    modified = true;
+                }
+
+                // we need to modify it
+                // done!
+            }
+            if (modified)
+            {
+                File.WriteAllLines(_hostsFilePath, lines, Misc.UTF8NoBOM);
+            }
+            return !modified;
         }
 
         /// <summary>
@@ -338,41 +361,72 @@ namespace UbisoftConnectProxy
             return false;
         }
 
-        void OnResponse(ResponseDto response)
+        void OnInitialResponse(J_ResponseInitialDto msg)
         {
-            if (_pendingRequests.TryGetValue(response.RequestId, out var request))
+            if (_pendingRequests.TryGetValue(msg.RequestId, out var request))
             {
-                request.TaskCompleter.TrySetResult(response);
+                request.InitialData.TrySetResult(msg.Data);
+            }
+            else
+            {
+                Console.WriteLine($"Unknown request '{msg.RequestId}' for initial");
             }
         }
 
-        public async Task<ResponseDataDto> DoRequestAsync(RequestDataDto requestData)
+        void OnResponseData(J_ResponseDataDto msg)
         {
-            RequestDto requestDto = new()
+            if (_pendingRequests.TryGetValue(msg.RequestId, out var request))
             {
-                RequestId = _nextRequestId++,
+                request.OnData(msg.Data);
+            }
+            else
+            {
+                Console.WriteLine($"Unknown request '{msg.RequestId}' for data");
+            }
+        }
+
+        public async Task DoRequestAsync(RequestDataDto requestData, Action<ResponseInitialDto> onInitial, Action<ResponseDataDto> onData, CancellationToken cancellationToken)
+        {
+            WS_RequestDto requestDto = new()
+            {
+                RequestId = ++_nextRequestId,
                 Data = requestData,
             };
 
-            if (_javaConnection != null)
+            if (_javaConnection == null)
             {
-                _javaConnection.Send(requestDto);
-                PendingRequest pendingRequest = new();
-                _pendingRequests.Add(requestDto.RequestId, pendingRequest);
-                var response = await pendingRequest.TaskCompleter.Task;
-                _pendingRequests.Remove(requestDto.RequestId);
-                if (response != null)
-                {
-                    return response.Data;
-                }
+                onInitial(new() { StatusCode = 500 });
+                onData(new() { Finish = true });
+                return;
             }
 
-            return new()
+            _javaConnection.Send(requestDto);
+
+            TaskCompletionSource tcsLastContent = new();
+            PendingRequest pendingRequest = new(x =>
             {
-                Content = Array.Empty<byte>(),
-                Headers = Array.Empty<HeaderDto>(),
-                StatusCode = 500,
-            };
+                onData(x);
+                if (x.Finish)
+                {
+                    Console.WriteLine($"Request {requestDto.RequestId} finished");
+                    tcsLastContent.TrySetResult();
+                }
+            });
+            using (cancellationToken.Register(() =>
+            {
+                _javaConnection?.Send(new WS_AbortRequestDto() { RequestId = requestDto.RequestId });
+                pendingRequest.InitialData.TrySetResult(new() { StatusCode = 500 });
+                pendingRequest.OnData(new() { Finish = true });
+            }, true))
+            {
+                _pendingRequests.Add(requestDto.RequestId, pendingRequest);
+                var initialData = await pendingRequest.InitialData.Task;
+                onInitial(initialData);
+
+                await tcsLastContent.Task;
+
+                _pendingRequests.Remove(requestDto.RequestId);
+            }
         }
 
         [DllImport("Kernel32")]
@@ -393,17 +447,18 @@ namespace UbisoftConnectProxy
 
     class PendingRequest
     {
-        public TaskCompletionSource<ResponseDto?> TaskCompleter { get; } = new();
+        public TaskCompletionSource<ResponseInitialDto> InitialData { get; } = new();
+        public Action<ResponseDataDto> OnData { get; }
 
-        public PendingRequest()
+        public PendingRequest(Action<ResponseDataDto> onData)
         {
-            CompleteLater();
+            OnData = onData;
         }
 
-        async void CompleteLater()
-        {
-            await Task.Delay(TimeSpan.FromSeconds(30));
-            TaskCompleter.TrySetResult(null);
-        }
+        //async void CompleteLater()
+        //{
+        //    await Task.Delay(TimeSpan.FromSeconds(30));
+        //    TaskCompleter.TrySetResult(null);
+        //}
     }
 }

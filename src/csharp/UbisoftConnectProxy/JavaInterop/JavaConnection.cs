@@ -15,18 +15,29 @@ namespace UbisoftConnectProxy.JavaInterop
 
         private readonly Action<Exception?> _onDisconnected;
         private readonly Action _onJavaDnsReady;
-        private readonly Action<ResponseDto> _onResponse;
+        private readonly Action<HelloFromJava> _onJavaConnected;
+        private readonly Action<J_ResponseInitialDto> _onInitialResponse;
+        private readonly Action<J_ResponseDataDto> _onResponseData;
 
         /// <summary>
         /// Create a connection from a bidirectional Stream.
         /// </summary>
-        public JavaConnection(Stream stream, Action<Exception?> onDisconnected, Action onJavaDnsReady, Action<ResponseDto> onResponse)
+        public JavaConnection(
+            Stream stream,
+            Action<Exception?> onDisconnected,
+            Action<HelloFromJava> onJavaConnected,
+            Action onJavaDnsReady,
+            Action<J_ResponseInitialDto> onInitialResponse,
+            Action<J_ResponseDataDto> onResponseData
+            )
         {
             Misc.ThrowIfHasNoSynchronizationContext();
 
             _onDisconnected = onDisconnected;
             _onJavaDnsReady = onJavaDnsReady;
-            _onResponse = onResponse;
+            _onJavaConnected = onJavaConnected;
+            _onInitialResponse = onInitialResponse;
+            _onResponseData = onResponseData;
 
             _stream = stream;
             _sender = new(_stream, Disconnect);
@@ -34,25 +45,31 @@ namespace UbisoftConnectProxy.JavaInterop
             ReceiveLoopAsync();
         }
 
-        public void Send(RequestDto dto) => Send(dto, RequestDto.MsgId);
-        public void SendReady(Ready what) => Send(new WebserverReady { Ready = what }, WebserverReady.MsgId);
-        public void Send(WebserverErrorDto dto) => Send(dto, WebserverErrorDto.MsgId);
+        public void Send(WS_WebserverErrorDto dto) => Send(dto, WS_WebserverErrorDto.MsgId);
+        public void SendReady(Ready what) => Send(new WS_WebserverReady { Ready = what }, WS_WebserverReady.MsgId);
+        public void Send(WS_RequestDto dto) => Send(dto, WS_RequestDto.MsgId);
+        public void Send(WS_AbortRequestDto dto) => Send(dto, WS_AbortRequestDto.MsgId);
 
-        private void Send(IDataObject? dto, byte msgId)
+        public void Send(IDataObject dto, byte msgId)
         {
             ThrowIfDisposed();
 
             using MemoryStream fullMessage = new();
             fullMessage.WriteByte(msgId);
-            if (dto != null)
+            //if (dto != null)
             {
-                using MemoryStream serialized = new();
-                dto.Write(serialized);
-                fullMessage.WriteJInt((int)serialized.Length);
-                fullMessage.Write(serialized.ToArray());
+                dto.Write(fullMessage);
+                //using MemoryStream serialized = new();
+                //dto.Write(serialized);
+                //fullMessage.WriteJInt((int)serialized.Length);
+                //fullMessage.Write(serialized.ToArray());
             }
             _sender.Send(fullMessage.ToArray());
         }
+
+        private const byte MsgId_J_Code = 20;
+        private const byte MsgId_J_ResponseInitial = 21;
+        private const byte MsgId_J_ResponseData = 22;
 
         private async void ReceiveLoopAsync()
         {
@@ -60,35 +77,54 @@ namespace UbisoftConnectProxy.JavaInterop
 
             try
             {
+                {
+                    // initial data
+                    HelloFromJava msg = new();
+                    await msg.ReadAsync(_stream);
+                    if (!Disposed)
+                    {
+                        _onJavaConnected(msg);
+                    }
+                }
+
                 while (!Disposed)
                 {
                     var msgId = (await _stream.ReadFullyAsync(1))[0];
-                    if (msgId == JavaDnsReady.MsgId)
+                    //Console.WriteLine($"Received msg {msgId}");
+                    switch (msgId)
                     {
-                        if (!Disposed)
-                        {
-                            _onJavaDnsReady();
-                        }
-                    }
-                    else
-                    {
-                        var messageLength = await _stream.ReadJIntAsync();
-                        var message = await _stream.ReadFullyAsync(messageLength);
-
-                        using MemoryStream ms = new(message);
-                        if (msgId == ResponseDto.MsgId)
-                        {
-                            ResponseDto response = new();
-                            await response.ReadAsync(ms);
-                            if (!Disposed)
+                        case MsgId_J_Code:
                             {
-                                _onResponse(response);
+                                JavaStatusCode msg = new();
+                                await msg.ReadAsync(_stream);
+                                if (!Disposed && msg.StatusCode == 1)
+                                {
+                                    _onJavaDnsReady();
+                                }
+                                break;
                             }
-                        }
-                        else
-                        {
+                        case MsgId_J_ResponseInitial:
+                            {
+                                J_ResponseInitialDto msg = new();
+                                await msg.ReadAsync(_stream);
+                                if (!Disposed)
+                                {
+                                    _onInitialResponse(msg);
+                                }
+                                break;
+                            }
+                        case MsgId_J_ResponseData:
+                            {
+                                J_ResponseDataDto msg = new();
+                                await msg.ReadAsync(_stream);
+                                if (!Disposed)
+                                {
+                                    _onResponseData(msg);
+                                }
+                                break;
+                            }
+                        default:
                             throw new IOException($"Unknown message '{msgId}'");
-                        }
                     }
                 }
             }

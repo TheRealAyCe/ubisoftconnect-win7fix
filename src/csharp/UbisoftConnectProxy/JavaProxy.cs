@@ -4,91 +4,131 @@ using Microsoft.AspNetCore.Http;
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using UbisoftConnectProxy.JavaInterop.Dtos;
 
-namespace UbisoftConnectProxy
+namespace UbisoftConnectProxy;
+
+public class JavaProxy : IProxy
 {
-    public class JavaProxy : IProxy
+    private readonly Synchronizer _synchronizer;
+
+    //private readonly DirectoryInfo _logFolder;
+    //private volatile int _requestCounter;
+
+    public JavaProxy(Synchronizer synchronizer)
     {
-        private readonly Synchronizer _synchronizer;
+        _synchronizer = synchronizer;
+        //_logFolder = new("Requests");
+        //_logFolder.Create();
+    }
 
-        //private readonly DirectoryInfo _logFolder;
-        //private volatile int _requestCounter;
+    //private void LogFile(string name, object dto)
+    //{
+    //    var json = Newtonsoft.Json.JsonConvert.SerializeObject(dto, Newtonsoft.Json.Formatting.Indented);
+    //    File.WriteAllText(Path.Combine(_logFolder.FullName, $"{name}.json"), json, Misc.UTF8NoBOM);
+    //}
 
-        public JavaProxy(Synchronizer synchronizer)
+    public async Task ForwardAsync(HttpContext context)
+    {
+        byte[] content;
+        await using (MemoryStream memoryStream = new())
         {
-            _synchronizer = synchronizer;
-            //_logFolder = new("Requests");
-            //_logFolder.Create();
+            await context.Request.Body.CopyToAsync(memoryStream);
+            content = memoryStream.ToArray();
         }
 
-        //private void LogFile(string name, object dto)
-        //{
-        //    var json = Newtonsoft.Json.JsonConvert.SerializeObject(dto, Newtonsoft.Json.Formatting.Indented);
-        //    File.WriteAllText(Path.Combine(_logFolder.FullName, $"{name}.json"), json, Misc.UTF8NoBOM);
-        //}
-
-        public async Task ForwardAsync(HttpContext context)
+        RequestDataDto requestDto = new()
         {
-            byte[] content;
-            await using (MemoryStream memoryStream = new())
+            Uri = "https://" + context.Request.Host + context.Request.Path +
+                                (context.Request.QueryString.HasValue ? context.Request.QueryString.Value : ""),
+            Method = context.Request.Method,
+        };
+        requestDto.Content.Content = content;
+        requestDto.Headers.Headers = context.Request.Headers
+                .Select(x => new HeaderDto { Name = x.Key, Values = x.Value.ToArray() })
+                .ToArray();
+
+        Console.WriteLine($"Forwarding {requestDto.Method} {requestDto.Uri}");
+
+        //var logName = $"{DateTime.Now.ToFileTime()}_{_requestCounter++}";
+        //LogFile(logName + " 0Request", requestDto);
+
+        var running = true;
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+        var token = cts.Token;
+        using (token.Register(() =>
+        {
+            // request was cancelled or otherwise failed
+            running = false;
+
+        }))
+        {
+            await _synchronizer.SynchronizationContext.DispatchAsync(async () =>
             {
-                await context.Request.Body.CopyToAsync(memoryStream);
-                content = memoryStream.ToArray();
-            }
+                TaskCompletionSource tcsSendingDone = new();
+                Console.WriteLine("Starting sender...");
+                SequentialAsyncAccess sequentialAccess = new();
+                try
+                {
+                    await _synchronizer.Logic.DoRequestAsync(requestDto, initial =>
+                    {
+                        try
+                        {
+                            Console.WriteLine("Status of response: " + initial.StatusCode);
+                            context.Response.StatusCode = initial.StatusCode;
 
-            RequestDataDto requestDto = new()
-            {
-                Uri = "https://" + context.Request.Host + context.Request.Path +
-                                    (context.Request.QueryString.HasValue ? context.Request.QueryString.Value : ""),
-                Method = context.Request.Method,
-                Content = content,
-                Headers = context.Request.Headers
-                    .Select(x => new HeaderDto { Name = x.Key, Values = x.Value.ToArray() })
-                    .ToArray(),
-            };
+                            foreach (var header in initial.Headers.Headers)
+                            {
+                                switch (header.Name.ToLowerInvariant())
+                                {
+                                    case "strict-transport-security":
+                                    case "connection":
+                                    case "keep-alive":
+                                        break;
+                                    case "content-type": context.Response.ContentType = string.Join(",", header.Values); break;
+                                    case "content-length": context.Response.ContentLength = int.Parse(string.Join(",", header.Values)); break;
+                                    default:
+                                        foreach (var headerValue in header.Values)
+                                        {
+                                            context.Response.Headers.Add(header.Name, headerValue);
+                                        }
+                                        break;
+                                }
+                            }
 
-            Console.WriteLine($"Forwarding {requestDto.Method} {requestDto.Uri}");
+                        }
+                        catch (Exception e)
+                        {
+                            _synchronizer.SynchronizationContext.Post(x => _synchronizer.Logic.OnProxyError(e), null);
+                        }
 
-            //var logName = $"{DateTime.Now.ToFileTime()}_{_requestCounter++}";
-            //LogFile(logName + " 0Request", requestDto);
+                    }, async update =>
+                    {
+                        using (await sequentialAccess.AwaitAsync())
+                        {
+                            await context.Response.Body.WriteAsync(update.Content.Content);
+                            await context.Response.Body.FlushAsync();
+                        }
+                        if (update.Finish)
+                        {
+                            tcsSendingDone.TrySetResult();
+                        }
+                    }, token);
+                }
+                catch (Exception e)
+                {
+                    _synchronizer.SynchronizationContext.Post(x => _synchronizer.Logic.OnProxyError(e), null);
+                }
+                await tcsSendingDone.Task;
+            });
 
-            var dto = await _synchronizer.SynchronizationContext.DispatchAsync(() => _synchronizer.Logic.DoRequestAsync(requestDto));
+            Console.WriteLine("Request done!");
+            await context.Response.Body.FlushAsync();
 
             //LogFile(logName + " 1Response", dto);
 
-            try
-            {
-                foreach (var header in dto.Headers)
-                {
-                    switch (header.Name.ToLowerInvariant())
-                    {
-                        case "strict-transport-security":
-                        case "connection":
-                        case "keep-alive":
-                            break;
-                        case "content-type": context.Response.ContentType = string.Join(",", header.Values); break;
-                        case "content-length": context.Response.ContentLength = int.Parse(string.Join(",", header.Values)); break;
-                        default:
-                            foreach (var headerValue in header.Values)
-                            {
-                                context.Response.Headers.Add(header.Name, headerValue);
-                            }
-                            break;
-                    }
-                }
-
-                Console.WriteLine("Status of response: " + dto.StatusCode);
-                context.Response.StatusCode = dto.StatusCode;
-
-                await context.Response.Body.WriteAsync(dto.Content);
-                await context.Response.Body.FlushAsync();
-            }
-            catch (Exception e)
-            {
-                _synchronizer.SynchronizationContext.Post(x => _synchronizer.Logic.OnProxyError(e), null);
-            }
         }
     }
 }

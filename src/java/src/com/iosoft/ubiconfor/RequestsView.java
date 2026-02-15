@@ -7,7 +7,6 @@ import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JComponent;
 import javax.swing.JEditorPane;
-import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.ScrollPaneConstants;
 
@@ -15,7 +14,8 @@ import com.iosoft.helpers.HtmlEscape;
 import com.iosoft.helpers.ui.awt.AntialiasedEditorPane;
 import com.iosoft.helpers.ui.awt.MiscAWT;
 import com.iosoft.ubiconfor.dtos.RequestDataDto;
-import com.iosoft.ubiconfor.dtos.ResponseDataDto;
+import com.iosoft.ubiconfor.dtos.ResponseHeaderDto;
+import com.iosoft.ubiconfor.dtos.WS_RequestDto;
 
 public class RequestsView {
 
@@ -41,10 +41,12 @@ public class RequestsView {
 		Panel = _scrollPane;
 	}
 
-	public void add(RequestDataDto request, ResponseDataDto response, Exception e) {
-		String entry = HtmlEscape.sanitizeForLabel(request.Method + " " + request.Uri) + "<br>\n-> "
+	public void add(WS_RequestDto request, ResponseHeaderDto response, int totalContentLength, Exception e) {
+		String entry = HtmlEscape
+				.sanitizeForLabel("[" + request.RequestId + "] " + request.Data.Method + " " + request.Data.Uri)
+				+ "<br>\n-> "
 				+ HtmlEscape.sanitizeForLabel(
-						e == null ? (response.StatusCode + " (" + response.Content.length + " bytes)") : e.toString())
+						e == null ? (response.StatusCode + " (" + totalContentLength + " bytes)") : e.toString())
 				+ "<br>\n<br>\n";
 		_entries.add(entry);
 

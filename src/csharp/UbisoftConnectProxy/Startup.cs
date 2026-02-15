@@ -1,21 +1,21 @@
 #nullable enable
 
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace UbisoftConnectProxy
+namespace UbisoftConnectProxy;
+
+public class Startup
 {
-    public class Startup
+    public void Configure(IApplicationBuilder app)
     {
-        public void Configure(IApplicationBuilder app)
+        var synchronizer = app.ApplicationServices.GetRequiredService<Synchronizer>();
+        IProxy proxy = new JavaProxy(synchronizer);
+        app.Use(async (HttpContext context, RequestDelegate next) =>
         {
-            var synchronizer = app.ApplicationServices.GetRequiredService<Synchronizer>();
-            IProxy proxy = new JavaProxy(synchronizer);
-            app.Use(async (context, next) =>
-            {
-                await proxy.ForwardAsync(context);
-                await next();
-            });
-        }
+            await proxy.ForwardAsync(context);
+           // await next();
+        });
     }
 }

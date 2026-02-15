@@ -4,7 +4,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 
-public class HeaderDto implements DataObject {
+public class HeaderDto implements IDataObject {
 	public String Name;
 	public String[] Values;
 

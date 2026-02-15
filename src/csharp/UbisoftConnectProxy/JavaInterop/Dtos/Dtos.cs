@@ -15,6 +15,30 @@ namespace UbisoftConnectProxy.JavaInterop.Dtos
         void Write(Stream stream);
     }
 
+    public class HelloFromJava
+    {
+        public string[] Domains { get; set; } = null!;
+
+        public async Task ReadAsync(Stream stream)
+        {
+            Domains = new string[await stream.ReadByteAsync()];
+            for (var i = 0; i < Domains.Length; i++)
+            {
+                Domains[i] = await stream.ReadJUTF8Async();
+            }
+        }
+    }
+
+    public class JavaStatusCode
+    {
+        public int StatusCode { get; set; }
+
+        public async Task ReadAsync(Stream stream)
+        {
+            StatusCode = await stream.ReadJIntAsync();
+        }
+    }
+
     public class HeaderDto : IDataObject
     {
         public string Name { get; set; } = null!;
@@ -33,10 +57,9 @@ namespace UbisoftConnectProxy.JavaInterop.Dtos
         }
     }
 
-    public abstract class HttpDataDto : IDataObject
+    public class HeadersDto : IDataObject
     {
-        public HeaderDto[] Headers { get; set; } = null!;
-        public byte[] Content { get; set; } = null!;
+        public HeaderDto[] Headers { get; set; } = Array.Empty<HeaderDto>();
 
         public virtual async Task ReadAsync(Stream stream)
         {
@@ -46,49 +69,78 @@ namespace UbisoftConnectProxy.JavaInterop.Dtos
                 await header.ReadAsync(stream);
                 return header;
             });
-            Content = await stream.ReadFullyAsync(await stream.ReadJIntAsync());
         }
 
         public virtual void Write(Stream stream)
         {
             stream.WriteList(Headers, x => x.Write(stream));
+        }
+    }
+
+    public class BytesDto : IDataObject
+    {
+        public byte[] Content { get; set; } = Array.Empty<byte>();
+
+        public virtual async Task ReadAsync(Stream stream)
+        {
+            Content = await stream.ReadFullyAsync(await stream.ReadJIntAsync());
+        }
+
+        public virtual void Write(Stream stream)
+        {
             stream.WriteJInt(Content.Length);
             stream.Write(Content);
         }
     }
 
-    public abstract class MessageDto<T> : IDataObject where T : IDataObject, new()
+    public abstract class MessageDto : IDataObject
     {
         public int RequestId { get; set; }
-        public T Data { get; set; } = default!;
 
-        public async Task ReadAsync(Stream stream)
+        public virtual async Task ReadAsync(Stream stream)
         {
             RequestId = await stream.ReadJIntAsync();
-            Data = new T();
+        }
+
+        public virtual void Write(Stream stream)
+        {
+            stream.WriteJInt(RequestId);
+        }
+    }
+
+    public abstract class MessageDto<T> : MessageDto where T : IDataObject, new()
+    {
+        public T Data { get; set; } = new T();
+
+        public override async Task ReadAsync(Stream stream)
+        {
+            await base.ReadAsync(stream);
             await Data.ReadAsync(stream);
         }
 
-        public void Write(Stream stream)
+        public override void Write(Stream stream)
         {
-            stream.WriteJInt(RequestId);
+            base.Write(stream);
             Data.Write(stream);
         }
     }
 
-    public class ResponseDto : MessageDto<ResponseDataDto>
+    public class J_ResponseInitialDto : MessageDto<ResponseInitialDto>
     {
-        public const byte MsgId = 1;
     }
 
-    public static class JavaDnsReady
+    public class J_ResponseDataDto : MessageDto<ResponseDataDto>
     {
-        public const byte MsgId = 2;
     }
 
-    public class RequestDto : MessageDto<RequestDataDto>
+    public class WS_RequestDto : MessageDto<RequestDataDto>
     {
-        public const byte MsgId = 10;
+        public const byte MsgId = 3;
+    }
+
+    public class WS_AbortRequestDto : MessageDto
+    {
+        public const byte MsgId = 4;
     }
 
     public enum Ready : byte
@@ -96,9 +148,9 @@ namespace UbisoftConnectProxy.JavaInterop.Dtos
         Hosts, Starting, Running
     }
 
-    public class WebserverReady : IDataObject
+    public class WS_WebserverReady : IDataObject
     {
-        public const byte MsgId = 11;
+        public const byte MsgId = 2;
 
         public Ready Ready { get; set; }
 
@@ -113,9 +165,9 @@ namespace UbisoftConnectProxy.JavaInterop.Dtos
         }
     }
 
-    public class WebserverErrorDto : IDataObject
+    public class WS_WebserverErrorDto : IDataObject
     {
-        public const byte MsgId = 12;
+        public const byte MsgId = 1;
 
         public bool Fatal;
         public string Text { get; set; } = "";
@@ -133,40 +185,63 @@ namespace UbisoftConnectProxy.JavaInterop.Dtos
         }
     }
 
-    public class RequestDataDto : HttpDataDto
+    public class RequestDataDto : IDataObject
     {
         public string Uri { get; set; } = null!;
         public string Method { get; set; } = null!;
+        public HeadersDto Headers { get; set; } = new HeadersDto();
+        public BytesDto Content { get; set; } = new BytesDto();
 
-        public override async Task ReadAsync(Stream stream)
+        public virtual async Task ReadAsync(Stream stream)
         {
             Uri = await stream.ReadJUTF8Async();
             Method = await stream.ReadJUTF8Async();
-            await base.ReadAsync(stream);
+            await Headers.ReadAsync(stream);
+            await Content.ReadAsync(stream);
         }
 
-        public override void Write(Stream stream)
+        public virtual void Write(Stream stream)
         {
             stream.WriteJUTF8(Uri);
             stream.WriteJUTF8(Method);
-            base.Write(stream);
+            Headers.Write(stream);
+            Content.Write(stream);
         }
     }
 
-    public class ResponseDataDto : HttpDataDto
+    public class ResponseInitialDto : IDataObject
     {
         public int StatusCode { get; set; }
+        public HeadersDto Headers { get; set; } = new HeadersDto();
 
-        public override async Task ReadAsync(Stream stream)
+        public virtual async Task ReadAsync(Stream stream)
         {
             StatusCode = await stream.ReadJIntAsync();
-            await base.ReadAsync(stream);
+            await Headers.ReadAsync(stream);
         }
 
-        public override void Write(Stream stream)
+        public virtual void Write(Stream stream)
         {
             stream.WriteJInt(StatusCode);
-            base.Write(stream);
+            Headers.Write(stream);
+        }
+    }
+
+    public class ResponseDataDto : IDataObject
+    {
+        public bool Finish { get; set; }
+        public BytesDto Content { get; set; } = new BytesDto();
+
+        public virtual async Task ReadAsync(Stream stream)
+        {
+            Finish = await stream.ReadByteAsync() != 0;
+            await Content.ReadAsync(stream);
+        }
+
+        public virtual void Write(Stream stream)
+        {
+            stream.WriteByte(Finish ? (byte)1 : (byte)0);
+            Content.Write(stream);
         }
     }
 

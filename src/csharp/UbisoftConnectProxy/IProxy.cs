@@ -3,10 +3,9 @@
 using Microsoft.AspNetCore.Http;
 using System.Threading.Tasks;
 
-namespace UbisoftConnectProxy
+namespace UbisoftConnectProxy;
+
+public interface IProxy
 {
-    public interface IProxy
-    {
-        Task ForwardAsync(HttpContext context);
-    }
+    Task ForwardAsync(HttpContext context);
 }
